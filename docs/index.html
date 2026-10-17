@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roll-O-Clock — simulazione</title>
+<meta name="description" content="Un orologio a sfere ricostruito: una pallina al minuto, tre guide, l'ora si legge contando.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111317'/%3E%3Ccircle cx='11' cy='16' r='5' fill='%23c8ccd3'/%3E%3Ccircle cx='21' cy='16' r='5' fill='%23c9a24a'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#111317; --panel:#1a1d22; --ink:#ebe8e1; --dim:#a2a8b1; --faint:#6c727b;
+  --brass:#c9a24a; --rule:rgba(235,232,225,.12);
+  --serif:"Instrument Serif",Georgia,serif; --sans:"Geist",system-ui,sans-serif; --mono:"Geist Mono",ui-monospace,monospace;
+  --expo:cubic-bezier(.16,1,.3,1);
+  --pad:clamp(16px, 6px + 100vw * .025, 48px);
+}
+*{box-sizing:border-box}
+html{scrollbar-color:#3a3f47 var(--bg);scrollbar-width:thin;caret-color:var(--brass)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+::selection{background:var(--brass);color:#16130a}
+:focus-visible{outline:2px solid var(--brass);outline-offset:3px;border-radius:4px}
+a{color:var(--ink);text-underline-offset:3px;text-decoration-color:var(--faint)}
+a:hover{text-decoration-color:var(--brass)}
+.mono{font-family:var(--mono);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+
+.wrap{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:clamp(20px,3vw,48px);align-items:start;
+  padding:var(--pad);max-width:1480px;margin:0 auto;min-height:100svh}
+.machine{position:sticky;top:var(--pad)}
+.machine svg{width:100%;height:auto;display:block}
+
+/* ---------- pannello ---------- */
+.panel{display:grid;gap:26px;padding-top:6px}
+h1{margin:0;font-family:var(--serif);font-weight:400;font-size:clamp(2.2rem,1.4rem + 2vw,3.2rem);line-height:1}
+h1 em{color:var(--brass)}
+.intro{margin:10px 0 0;color:var(--dim)}
+.reading{border-block:1px solid var(--rule);padding:18px 0 16px}
+.time{font-family:var(--serif);font-size:clamp(4.2rem,3rem + 4vw,6.4rem);line-height:.9;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.time .sep{color:var(--brass)}
+.formula{margin:12px 0 0;font-family:var(--mono);font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+.formula b{color:var(--ink);font-weight:500}
+.sync{display:flex;align-items:center;gap:8px;margin-top:10px}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--faint);transition:background .25s var(--expo)}
+.sync[data-live="1"] i{background:#6fd08c;box-shadow:0 0 0 3px rgba(111,208,140,.18)}
+
+.seg{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border-radius:999px;padding:4px;gap:2px}
+.seg button{appearance:none;border:0;background:none;color:var(--dim);font:inherit;font-size:13px;padding:9px 4px;border-radius:999px;cursor:pointer;
+  transition:background .25s var(--expo),color .25s var(--expo)}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--rule);background:none;color:var(--ink);font:inherit;font-size:13.5px;
+  padding:10px 16px;border-radius:999px;cursor:pointer;transition:border-color .25s var(--expo),background .25s var(--expo)}
+.btn:hover{border-color:var(--brass);background:rgba(201,162,74,.08)}
+.btn:active{transform:translateY(1px)}
+.check{display:flex;align-items:center;gap:10px;color:var(--dim);cursor:pointer;font-size:14px}
+.check input{accent-color:var(--brass);width:16px;height:16px}
+
+.how{margin:0;padding:0;list-style:none;display:grid;gap:14px;counter-reset:s}
+.how li{display:grid;grid-template-columns:26px 1fr;gap:10px;color:var(--dim)}
+.how li::before{counter-increment:s;content:counter(s);font-family:var(--mono);font-size:12px;color:var(--brass);padding-top:2px}
+.how b{color:var(--ink);font-weight:500}
+.perm{margin:0;padding:14px 16px;background:var(--panel);border-radius:12px;color:var(--dim);font-size:14px}
+.perm b{color:var(--ink);font-weight:500}
+.phys{margin:0;font-size:13px;color:var(--faint);line-height:1.6}
+.phys b{color:var(--dim);font-weight:500}
+.src{font-size:13px;color:var(--faint)}
+.src a{color:var(--dim)}
+
+/* ---------- svg ---------- */
+.lab{font-family:var(--mono);font-size:10px;letter-spacing:.08em;fill:var(--faint)}
+.rlab{font-family:var(--mono);font-size:11px;letter-spacing:.14em;fill:var(--dim)}
+.num{font-family:var(--mono);font-size:9px;font-weight:500;fill:#1b1e23;text-anchor:middle;dominant-baseline:central;
+  opacity:0;transition:opacity .25s var(--expo);pointer-events:none}
+.numbers .num{opacity:1}
+
+@media (max-width:980px){
+  .wrap{grid-template-columns:1fr}
+  .machine{position:static}
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="machine" aria-label="Simulazione dell'orologio a sfere">
+    <svg id="clock" viewBox="40 30 985 680" role="img" aria-labelledby="t-read">
+      <defs>
+        <radialGradient id="steel" cx=".34" cy=".3" r=".75">
+          <stop offset="0" stop-color="#ffffff"/><stop offset=".22" stop-color="#e3e6eb"/>
+          <stop offset=".62" stop-color="#8c929b"/><stop offset="1" stop-color="#2d3036"/>
+        </radialGradient>
+        <radialGradient id="brassball" cx=".34" cy=".3" r=".75">
+          <stop offset="0" stop-color="#fff4d2"/><stop offset=".25" stop-color="#e3c26d"/>
+          <stop offset=".65" stop-color="#9d7a2c"/><stop offset="1" stop-color="#3e2f10"/>
+        </radialGradient>
+        <linearGradient id="rod" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#d9dde3"/><stop offset=".5" stop-color="#8a9099"/><stop offset="1" stop-color="#4a4f57"/>
+        </linearGradient>
+        <linearGradient id="brass" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#7d6120"/><stop offset=".45" stop-color="#e2c26e"/><stop offset="1" stop-color="#8a6b25"/>
+        </linearGradient>
+      </defs>
+      <!-- telaio -->
+      <rect x="60" y="44" width="955" height="630" rx="18" fill="#171a1f" stroke="rgba(235,232,225,.07)"/>
+      <rect x="84" y="56" width="10" height="610" rx="3" fill="url(#brass)"/>
+      <rect x="60" y="662" width="955" height="26" rx="6" fill="#2a2418"/>
+      <rect x="60" y="662" width="955" height="4" fill="url(#brass)" opacity=".7"/>
+      <g id="static"></g>
+      <g id="rails"></g>
+      <g id="balls"></g>
+    </svg>
+  </section>
+
+  <aside class="panel">
+    <div>
+      <h1>Roll-O-<em>Clock</em></h1>
+      <p class="intro">L'orologio a sfere: niente lancette, niente quadrante. Ogni minuto un braccio solleva una pallina, e l'ora si legge contando.</p>
+    </div>
+
+    <div class="reading">
+      <div class="time" id="t-read" aria-label=""><span id="hh">1</span><span class="sep">:</span><span id="mm">00</span></div>
+      <p class="formula" id="formula"></p>
+      <div class="sync mono" id="sync" data-live="1"><i></i><span id="sync-t">Sincronizzato con l'ora reale</span></div>
+    </div>
+
+    <div style="display:grid;gap:12px">
+      <div class="seg" role="group" aria-label="Velocità">
+        <button type="button" data-mode="real" aria-pressed="true">Reale</button>
+        <button type="button" data-mode="10" aria-pressed="false">10×</button>
+        <button type="button" data-mode="60" aria-pressed="false">60×</button>
+        <button type="button" data-mode="pause" aria-pressed="false">Pausa</button>
+      </div>
+      <div class="row">
+        <button class="btn" type="button" id="plus">+1 minuto</button>
+        <button class="btn" type="button" id="now">Torna all'ora attuale</button>
+      </div>
+      <label class="check"><input type="checkbox" id="nums"> Numera le palline: si vede l'ordine che si inverte, e che girano rotolando</label>
+      <label class="check"><input type="checkbox" id="slow"> Rallentatore ×4</label>
+      <label class="check"><input type="checkbox" id="snd" checked> Suono: un tic metallico quando due palline si toccano</label>
+    </div>
+
+    <ol class="how">
+      <li><span>Ogni minuto il <b>braccio</b> a destra prende la prima pallina del serbatoio e la porta in cima.</span></li>
+      <li><span>La <b>guida dei minuti</b> ne tiene 4. La quinta si ferma sulla <b>leva</b> all'imbocco: il suo peso ribalta la guida. Lei cade per prima sulla guida di sotto, poi il <b>deviatore</b> si abbassa e le altre quattro tornano al serbatoio in ordine inverso.</span></li>
+      <li><span>La <b>guida dei 5 minuti</b> ne tiene 11, la dodicesima passa alle <b>ore</b>. Le ore hanno una pallina fissa in ottone, l'1, e ne tengono altre 11.</span></li>
+      <li><span>Dopo le 12:59 tutto si svuota e si riparte dall'1:00. Si legge così: <b>palline delle ore</b> : <b>5 × centrali</b> + <b>in alto</b>.</span></li>
+    </ol>
+
+    <p class="phys"><b>Fisica.</b> Gravità reale in scala (una pallina = 16 mm). In discesa le palline accelerano come sfere piene che rotolano senza strisciare, <i>a = 5/7 · g · sin θ</i>. Cadono in parabola, rimbalzano sugli urti con perdita d'energia, e le guide oscillano contro i loro fermi prima di assestarsi. Il braccio è l'unica parte a velocità di motore.</p>
+
+    <p class="perm" id="perm"></p>
+
+    <p class="src">Fonti: <a href="https://en.wikipedia.org/wiki/Rolling_ball_clock">Rolling ball clock, Wikipedia</a> · <a href="https://www.idle-tyme.com/">Idle-Tyme</a> · <a href="https://www.hawleys.info/catalogue/lot/3dffe0ebee588f1cf76be97988f06cd1/7cb4c6021a1bcb17d5fdbb561c593635/antique-and-fine-art-lot-837/">Roll-O-Clock, scheda d'asta</a></p>
+  </aside>
+</main>
+
+<script>
+(function(){
+  var NS = 'http://www.w3.org/2000/svg';
+  var R = 11, D = 22, N = 30;                /* raggio, diametro, palline in gioco */
+  var reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------------- fisica ----------------
+     Scala: diametro 22 px = 16 mm, quindi 1 px ≈ 0,73 mm.
+     g = 9,81 m/s² = 9810 mm/s² ≈ 13 440 px/s² = 0,01344 px/ms².
+     Sfera piena che rotola senza strisciare: a = 5/7 · g · sin θ. */
+  var G = 0.01344, AR = G * 5 / 7;
+  var E_RAIL = .22, E_HOP = .18, E_SWING = .35;   /* coefficienti di restituzione */
+
+  /* ---------------- geometria ---------------- */
+  function V(x,y){ return {x:x, y:y}; }
+  function add(a,b){ return V(a.x+b.x, a.y+b.y); }
+  function sub(a,b){ return V(a.x-b.x, a.y-b.y); }
+  function mul(a,k){ return V(a.x*k, a.y*k); }
+  function dot(a,b){ return a.x*b.x + a.y*b.y; }
+  function len(a){ return Math.hypot(a.x, a.y); }
+  function norm(a){ var l = len(a); return V(a.x/l, a.y/l); }
+  function rotP(p,c,deg){ var r = deg*Math.PI/180, dx = p.x-c.x, dy = p.y-c.y;
+    return V(c.x + dx*Math.cos(r) - dy*Math.sin(r), c.y + dx*Math.sin(r) + dy*Math.cos(r)); }
+  function el(tag, attrs, parent){ var e = document.createElementNS(NS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+
+  var gStatic = document.getElementById('static'), gRails = document.getElementById('rails'), gBalls = document.getElementById('balls');
+
+  /* serbatoio: la testa è a destra, vicino al braccio */
+  var TH = V(905, 626), TT = V(160, 592), tu = norm(sub(TT, TH)), toHead = mul(tu, -1);
+  function qpos(i){ return add(TH, mul(tu, i*D)); }
+  function troughY(x){ return TH.y + (x - TH.x) * (tu.y / tu.x); }
+  var LX = 975, LBOT = 626, LTOP = 72;        /* braccio */
+  var R0 = V(938, 486), R1 = V(196, 528), rdir = norm(sub(R1, R0));
+  function rampY(x){ return R0.y + (x - R0.x) * (rdir.y / rdir.x); }
+  var WALL = 930, LSTOP = 162, TIP = 8;
+
+  function railFrom(S, x, slope){ return V(x, S.y + (x - S.x) * slope); }
+  var SL = -32 / 710;
+  var rails = [
+    {id:'top',  S:V(330,120), E:V(880,94), cap:4,  name:'MINUTI',  labels:['1','2','3','4']},
+    {id:'mid',  S:V(170,262), cap:11, name:'× 5 MIN', labels:['5','10','15','20','25','30','35','40','45','50','55']},
+    {id:'hour', S:V(170,402), cap:11, name:'ORE',     labels:['1','2','3','4','5','6','7','8','9','10','11','12'], fixed:true}
+  ];
+  rails[1].E = railFrom(rails[1].S, 901, SL);
+  rails[2].E = railFrom(rails[2].S, 901, SL);
+  rails.forEach(function(r){
+    r.v = norm(sub(r.E, r.S)); r.n = V(-r.v.y, r.v.x); r.len = len(sub(r.E, r.S));
+    r.theta = 0; r.list = []; r.off = r.fixed ? 1 : 0;
+  });
+  function posOn(r, d){ return rotP(add(r.S, mul(r.v, d)), r.S, r.theta); }
+  function dSlot(r, k){ return R + 3 + (k + r.off) * D; }
+  var D_LEVER = function(r){ return r.len - R - 2; };
+  function endTip(r){ return rotP(add(r.S, mul(r.v, r.len + 4)), r.S, TIP); }
+
+  /* ---------------- disegno ---------------- */
+  function rod(a, b, w, parent){ return el('line', {x1:a.x, y1:a.y, x2:b.x, y2:b.y, stroke:'url(#rod)', 'stroke-width':w, 'stroke-linecap':'round'}, parent); }
+  var under = V(0, R + 4);
+  rod(add(V(TT.x - 20, troughY(TT.x - 20)), under), add(TH, add(under, V(14, 0))), 6, gStatic);
+  el('line', {x1:TH.x+16, y1:TH.y-6, x2:TH.x+16, y2:TH.y+R+4, stroke:'url(#rod)', 'stroke-width':4}, gStatic);
+  el('rect', {x:LSTOP - R - 7, y:500, width:5, height:112, rx:2, fill:'url(#brass)'}, gStatic);   /* fermo sinistro */
+  el('text', {x:560, y:652, class:'rlab', 'text-anchor':'middle'}, gStatic).textContent = 'SERBATOIO';
+  rod(add(R0, V(6, R + 4)), add(R1, V(-4, R + 4)), 4, gStatic);
+  el('text', {x:560, y:532, class:'lab', 'text-anchor':'middle'}, gStatic).textContent = 'RITORNO';
+  /* canale di ritorno a destra */
+  el('rect', {x:WALL + R + 1, y:150, width:5, height:R0.y - 150 + R, rx:2, fill:'url(#rod)'}, gStatic);
+  /* braccio */
+  el('rect', {x:LX-17, y:LTOP-22, width:34, height:LBOT-LTOP+44, rx:17, fill:'none', stroke:'rgba(235,232,225,.10)', 'stroke-width':1.5}, gStatic);
+  rod(V(LX+19, LTOP-14), V(LX+19, LBOT+14), 4, gStatic);
+  el('text', {x:LX, y:LBOT+44, class:'lab', 'text-anchor':'middle'}, gStatic).textContent = 'BRACCIO';
+  var bucket = el('path', {d:'M-15 -2 L-15 14 Q-15 17 -12 17 L12 17 Q15 17 15 14 L15 -2', fill:'none', stroke:'url(#brass)', 'stroke-width':4, 'stroke-linecap':'round'}, gStatic);
+  function bucketY(y){ bucket.setAttribute('transform', 'translate(' + LX + ' ' + (y - R + 8) + ')'); }
+  bucketY(LBOT);
+  rod(add(V(LX - 8, LTOP), under), add(rails[0].E, under), 4, gStatic);   /* scivolo */
+
+  rails.forEach(function(r){
+    r.g = el('g', {}, gRails);
+    rod(add(r.S, mul(r.n, R+3)), add(add(r.E, mul(r.v, 6)), mul(r.n, R+3)), 6, r.g);
+    rod(add(r.S, mul(r.n, -R-3)), add(r.E, mul(r.n, -R-3)), 2, r.g);
+    var deg = Math.atan2(r.v.y, r.v.x) * 180 / Math.PI;
+    el('rect', {x:r.S.x-5, y:r.S.y-R-5, width:6, height:2*R+12, rx:2, fill:'url(#brass)', transform:'rotate(' + deg + ' ' + r.S.x + ' ' + r.S.y + ')'}, r.g);
+    var lv = add(r.S, mul(r.v, D_LEVER(r) - R - 4));   /* la leva all'imbocco */
+    el('rect', {x:lv.x-2, y:lv.y+R-4, width:4, height:8, rx:1, fill:'url(#brass)', transform:'rotate(' + deg + ' ' + lv.x + ' ' + lv.y + ')'}, r.g);
+    r.labels.forEach(function(t, k){
+      var p = add(add(r.S, mul(r.v, R + 3 + k*D)), mul(r.n, R + 17));
+      el('text', {x:p.x, y:p.y, class:'lab', 'text-anchor':'middle'}, r.g).textContent = t;
+    });
+    var lp = add(r.S, mul(r.v, -18));
+    el('text', {x:lp.x, y:lp.y + 4, class:'rlab', 'text-anchor':'end'}, r.g).textContent = r.name;
+    if (r.fixed){ var fp = add(r.S, mul(r.v, R + 3)); el('circle', {cx:fp.x, cy:fp.y, r:R, fill:'url(#brassball)'}, r.g); }
+  });
+  function applyRail(r){ r.g.setAttribute('transform', 'rotate(' + r.theta.toFixed(3) + ' ' + r.S.x + ' ' + r.S.y + ')'); }
+
+  /* deviatori: su quando cade la pallina che scende di piano, giù per quelle che tornano */
+  var flaps = [0, 1].map(function(i){
+    var r = rails[i], e = endTip(r), c = V(WALL - 4, e.y + 14);
+    var g = el('g', {}, gRails);
+    rod(add(e, under), add(c, under), 4, g).setAttribute('stroke', 'url(#brass)');
+    var piv = add(c, under);
+    var up = -90 - Math.atan2(e.y - c.y, e.x - c.x) * 180 / Math.PI;
+    var f = {g:g, piv:piv, a:up, up:up, from:e, to:c};
+    f.set = function(a){ f.a = a; g.setAttribute('transform', 'rotate(' + a.toFixed(2) + ' ' + piv.x + ' ' + piv.y + ')'); };
+    f.set(up);
+    return f;
+  });
+
+  /* palline */
+  var balls = [];
+  for (var i = 0; i < N; i++){
+    var g = el('g', {}, gBalls);
+    el('circle', {r:R, fill:'url(#steel)'}, g);
+    var t = el('text', {class:'num'}, g); t.textContent = i + 1;
+    balls.push({id:i, g:g, t:t, p:V(0,0), ang:0, w:0, where:'set'});
+  }
+  function put(b, p, ang){
+    b.p = p; if (ang !== undefined) b.ang = ang;
+    b.g.setAttribute('transform', 'translate(' + p.x.toFixed(2) + ' ' + p.y.toFixed(2) + ')');
+    b.t.setAttribute('transform', 'rotate(' + (b.ang * 180 / Math.PI).toFixed(1) + ')');
+  }
+
+  /* ---------------- tempo della simulazione ---------------- */
+  var gen = 0, K = 1, SLOW = 1;
+  function tween(ms, fn){
+    var g = gen;
+    return new Promise(function(res){
+      var real = ms * K * SLOW;
+      if (real < 16){ fn(1); return res(); }
+      var t0 = performance.now();
+      (function f(now){
+        if (g !== gen) return res();
+        var u = Math.min(1, (now - t0) / real);
+        fn(u); if (u < 1) requestAnimationFrame(f); else res();
+      })(t0);
+    });
+  }
+  function sleep(ms){ return tween(ms, function(){}); }
+
+  /* rotolamento su un tratto dritto: accelera o frena secondo la pendenza */
+  function rollTo(b, to, v0){
+    v0 = Math.max(0, v0 || 0);
+    var from = b.p, d = sub(to, from), s = len(d);
+    if (s < .01) return Promise.resolve(v0);
+    var dir = mul(d, 1/s), a = AR * dir.y, sg = dir.x >= 0 ? 1 : -1, ang0 = b.ang;
+    var disc = v0*v0 + 2*a*s, T;
+    if (Math.abs(a) < 1e-9) T = s / Math.max(v0, .03);
+    else if (disc <= 0) T = v0 / -a;
+    else T = (-v0 + Math.sqrt(disc)) / a;
+    if (!(T > 0)) T = s / Math.max(v0, .03);
+    var vEnd = Math.max(0, v0 + a*T);
+    return tween(T, function(u){ var t = u*T, x = Math.min(s, v0*t + .5*a*t*t); put(b, add(from, mul(dir, x)), ang0 + sg*x/R); })
+      .then(function(){ put(b, to); b.w = sg * vEnd / R; return vEnd; });
+  }
+  /* volo balistico fino a quota yLand; se incontra la parete xWall rimbalza */
+  function tLand(y0, vy, yl){ return (-vy + Math.sqrt(Math.max(0, vy*vy + 2*G*(yl - y0)))) / G; }
+  async function fly(b, v, xWall, yLand, eWall){
+    var p0 = b.p, a0 = b.ang, w = b.w;
+    var tL = tLand(p0.y, v.y, yLand);
+    var tW = (xWall != null && v.x !== 0) ? (xWall - p0.x) / v.x : Infinity;
+    if (!(tW > 0)) tW = Infinity;
+    var t1 = Math.min(tL, tW);
+    await tween(t1, function(u){ var t = u*t1; put(b, V(p0.x + v.x*t, p0.y + v.y*t + .5*G*t*t), a0 + w*t); });
+    var vy1 = v.y + G*t1;
+    if (t1 === tL) return V(v.x, vy1);
+    var p1 = b.p, a1 = b.ang, vx2 = -eWall * v.x, t2 = tLand(p1.y, vy1, yLand);
+    await tween(t2, function(u){ var t = u*t2; put(b, V(p1.x + vx2*t, p1.y + vy1*t + .5*G*t*t), a1 - w*.3*t); });
+    return V(vx2, vy1 + G*t2);
+  }
+  /* rimbalzo sul posto dopo una caduta */
+  function hop(b, vn){
+    var vb = E_HOP * Math.abs(vn); if (vb < .12) return Promise.resolve();
+    var T = 2*vb/G, base = b.p;
+    return tween(T, function(u){ var t = u*T; put(b, V(base.x, base.y - (vb*t - .5*G*t*t))); }).then(function(){ put(b, base); });
+  }
+  /* urto contro la fila o il fermo: rimbalza indietro in salita e ricade, fino a fermarsi */
+  async function settle(b, target, v, dir, touch){
+    if (touch) clink(v);
+    var a = AR * dir.y;
+    if (!(a > 0)) return;
+    for (var n = 0; n < 3; n++){
+      v *= E_RAIL; var s = v*v / (2*a);
+      if (s < .6) break;
+      await rollTo(b, sub(target, mul(dir, s)), v);
+      v = await rollTo(b, target, 0);
+      if (touch) clink(v);
+    }
+    put(b, target);
+  }
+
+  /* ---------------- suono ----------------
+     Acciaio contro acciaio: tre parziali non armoniche (1 : 2,76 : 5,40,
+     i modi di una barra libera) che si spengono in poche decine di ms.
+     Volume proporzionale alla velocità d'urto. */
+  var AC = null, soundOn = true, lastClink = 0;
+  function wake(){
+    if (!AC){ var C = window.AudioContext || window.webkitAudioContext; if (!C) return; AC = new C(); }
+    if (AC.state === 'suspended') AC.resume();
+  }
+  ['pointerdown', 'keydown'].forEach(function(t){ addEventListener(t, wake, {passive:true}); });
+  function clink(v){
+    if (!soundOn || !AC || AC.state !== 'running' || document.hidden) return;
+    var now = AC.currentTime;
+    if (now - lastClink < .028) return;                 /* niente raffiche a 60× */
+    var amp = Math.pow(Math.min(1, v / .9), 1.3) * .045;
+    if (amp < .0015) return;
+    lastClink = now;
+    var f = 2500 + Math.random() * 900;
+    var out = AC.createGain(); out.gain.value = amp; out.connect(AC.destination);
+    [[1, 1, .085], [2.76, .42, .05], [5.4, .18, .028]].forEach(function(pt){
+      var o = AC.createOscillator(), g = AC.createGain();
+      o.type = 'sine'; o.frequency.value = f * pt[0];
+      g.gain.setValueAtTime(pt[1], now);
+      g.gain.exponentialRampToValueAtTime(.0001, now + pt[2]);
+      o.connect(g); g.connect(out); o.start(now); o.stop(now + pt[2] + .02);
+    });
+  }
+  /* una leva che cade sotto la gravità e sbatte contro il suo fermo */
+  var ALPHA = 2.8e-4;   /* °/ms² */
+  async function swing(from, to, set){
+    var sg = to > from ? 1 : -1, amp = Math.abs(to - from), start = from;
+    while (true){
+      var T = Math.sqrt(2*amp/ALPHA), s0 = start;
+      await tween(T, function(u){ var t = u*T; set(s0 + sg*.5*ALPHA*t*t); });
+      amp *= E_SWING * E_SWING;
+      if (amp < .12) break;
+      var T2 = Math.sqrt(2*amp/ALPHA), w = ALPHA*T2;
+      await tween(T2, function(u){ var t = u*T2; set(to - sg*(w*t - .5*ALPHA*t*t)); });
+      start = to - sg*amp;
+    }
+    set(to);
+  }
+  var ease = function(t){ return t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2; };
+
+  /* ---------------- modello logico puro ---------------- */
+  var L = null, queue = [];
+  /* all'overflow la pallina in più esce per prima (è sull'imbocco),
+     poi la fila, dalla più vicina all'uscita: ordine inverso */
+  function step(S){
+    var b = S.q.shift();
+    if (S.t.length < 4){ S.t.push(b); return; }
+    while (S.t.length) S.q.push(S.t.pop());
+    if (S.f.length < 11){ S.f.push(b); return; }
+    while (S.f.length) S.q.push(S.f.pop());
+    if (S.h.length < 11){ S.h.push(b); return; }
+    S.q.push(b);
+    while (S.h.length) S.q.push(S.h.pop());
+  }
+  function fresh(){ var q = []; for (var i = 0; i < N; i++) q.push(i); return {q:q, t:[], f:[], h:[]}; }
+  function snap(){
+    rails.forEach(function(r){ r.theta = 0; applyRail(r); r.list.forEach(function(b, k){ put(b, posOn(r, dSlot(r, k))); }); });
+    flaps.forEach(function(f){ f.set(f.up); });
+    queue.forEach(function(b, k){ put(b, qpos(k)); });
+    bucketY(LBOT);
+  }
+  function applyLogical(){
+    gen++;
+    queue = L.q.map(function(id){ return balls[id]; });
+    rails[0].list = L.t.map(function(id){ return balls[id]; });
+    rails[1].list = L.f.map(function(id){ return balls[id]; });
+    rails[2].list = L.h.map(function(id){ return balls[id]; });
+    balls.forEach(function(b){ b.where = 'set'; });
+    snap(); read();
+    busy = Promise.resolve(); pending = 0;
+  }
+  function build(m){ L = fresh(); for (var i = 0; i < m; i++) step(L); applyLogical(); }
+  function advance(n){ for (var i = 0; i < n; i++) step(L); applyLogical(); }
+
+  /* ---------------- un minuto, animato ---------------- */
+  function shiftOne(b, k){
+    var to = qpos(k);
+    return rollTo(b, to, 0).then(function(v){ return settle(b, to, v, toHead, k > 0); });
+  }
+  async function minute(){
+    var my = gen, b = queue.shift();
+    queue.forEach(function(q, k){ if (q.where === 'set') shiftOne(q, k); });
+    b.where = 'moving';
+    await rollTo(b, V(LX, LBOT + 4), 0);                  /* scende nella tazza del braccio */
+    await tween(1100, function(u){ var y = LBOT + 4 + (LTOP - LBOT - 4) * ease(u); put(b, V(LX, y)); bucketY(y); });
+    if (my !== gen) return;
+    tween(900, function(u){ bucketY(LTOP + (LBOT - LTOP) * ease(u)); });
+    put(b, V(LX - 8, LTOP));
+    var v = await rollTo(b, rails[0].E, 0);               /* giù per lo scivolo */
+    await arrive(0, b, v, my);
+    read();
+  }
+
+  async function arrive(i, b, v, my){
+    var r = rails[i], dirIn = mul(r.v, -1);
+    if (r.list.length < r.cap){
+      var target = posOn(r, dSlot(r, r.list.length));
+      var vEnd = await rollTo(b, target, v);
+      await settle(b, target, vEnd, dirIn, r.list.length + r.off > 0);
+      if (my !== gen) return;
+      r.list.push(b); b.where = 'set'; read(); return;
+    }
+    /* piena: la pallina si ferma sulla leva, il suo peso ribalta la guida */
+    var lever = posOn(r, D_LEVER(r));
+    await rollTo(b, lever, Math.min(v, .05));
+    var stack = r.list.slice();
+    await swing(0, TIP, function(a){
+      r.theta = a; applyRail(r);
+      stack.forEach(function(x, k){ put(x, posOn(r, dSlot(r, k))); });
+      put(b, posOn(r, D_LEVER(r)));
+    });
+    if (my !== gen) return;
+    r.list = [];
+    var end = posOn(r, r.len + 4), tipDir = norm(sub(end, posOn(r, r.len - 20)));
+    var goers = stack.slice().reverse(), hour = (i === 2), jobs = [];
+    goers.forEach(function(x){ x.where = 'moving'; });
+    if (hour) queue.push(b);                              /* stesso ordine del modello logico */
+    goers.forEach(function(x){ queue.push(x); });
+
+    /* 1. la pallina della leva esce per prima */
+    var vt = await rollTo(b, end, 0);
+    if (!hour){
+      var nx = rails[i + 1];
+      var v2 = await fly(b, mul(tipDir, vt), nx.E.x, nx.E.y, 0);
+      await hop(b, v2.y);
+      jobs.push(arrive(i + 1, b, Math.max(0, dot(v2, mul(nx.v, -1))), my));
+      /* il deviatore si abbassa sotto il proprio peso */
+      await swing(flaps[i].up, 0, flaps[i].set);
+    } else {
+      b.where = 'moving';
+      jobs.push(home(b, mul(tipDir, vt), my, false));
+    }
+    /* 2. la fila si svuota: rotolano insieme, esce prima la più vicina */
+    var leaves = goers.map(function(x){
+      return rollTo(x, end, 0).then(function(v){
+        var job = home(x, mul(tipDir, v), my, !hour ? flaps[i] : null);
+        jobs.push(job); return job.left;
+      });
+    });
+    /* 3. vuota, la guida ricade sul fermo; il deviatore torna su */
+    Promise.all(leaves).then(function(){
+      if (my !== gen) return;
+      if (!hour) tween(420, function(u){ flaps[i].set(flaps[i].up * ease(u)); });
+      swing(TIP, 0, function(a){ r.theta = a; applyRail(r); });
+    });
+    await Promise.all(leaves);
+    await Promise.all(jobs);
+  }
+
+  /* il viaggio di ritorno: deviatore, canale, rampa, fermo, serbatoio */
+  function home(x, v, my, flap){
+    var left, leftP = new Promise(function(r){ left = r; });
+    var p = (async function(){
+      if (flap){
+        v = await rollTo(x, flap.to, len(v));
+        v = mul(norm(sub(flap.to, flap.from)), v);
+      }
+      left();
+      var vl = await fly(x, v, WALL, rampY(WALL), .15);
+      await hop(x, vl.y);
+      var along = await rollTo(x, R1, Math.max(.02, dot(vl, rdir)));
+      var vo = await fly(x, mul(rdir, along), LSTOP, troughY(LSTOP), .15);
+      await hop(x, vo.y);
+      if (my !== gen) return;
+      var k = queue.indexOf(x), to = qpos(k);
+      var vq = await rollTo(x, to, Math.max(0, dot(vo, toHead)));
+      await settle(x, to, vq, toHead, k > 0);
+      x.where = 'set';
+      var k2 = queue.indexOf(x); if (k2 > -1 && k2 !== k) shiftOne(x, k2);
+    })();
+    p.left = leftP;
+    return p;
+  }
+
+  /* ---------------- lettura ---------------- */
+  var hh = document.getElementById('hh'), mm = document.getElementById('mm'), formula = document.getElementById('formula');
+  var tread = document.getElementById('t-read');
+  function read(){
+    var h = 1 + rails[2].list.length, f = rails[1].list.length, t = rails[0].list.length, m = f*5 + t;
+    hh.textContent = h; mm.textContent = String(m).padStart(2, '0');
+    formula.innerHTML = 'ore = 1 + <b>' + rails[2].list.length + '</b> &nbsp;·&nbsp; minuti = <b>' + f + '</b>×5 + <b>' + t + '</b>';
+    tread.setAttribute('aria-label', 'Ora letta sull’orologio: ' + h + ' e ' + m);
+  }
+
+  /* ---------------- modalità ---------------- */
+  var busy = Promise.resolve(), mode = 'real', timer = null, simMin = 0, pending = 0;
+  function tick(){
+    if (pending > 2) return;
+    var tok = gen; pending++;
+    step(L); simMin = (simMin + 1) % 720;
+    busy = busy.then(function(){ if (tok === gen) return minute(); })
+               .finally(function(){ pending = Math.max(0, pending - 1); });
+  }
+  function nowMinutes(){ var d = new Date(), h = d.getHours() % 12; return (h === 0 ? 11 : h - 1) * 60 + d.getMinutes(); }
+  function clearTimers(){ clearTimeout(timer); clearInterval(timer); timer = null; }
+  function scheduleReal(){
+    var d = new Date(), ms = 60000 - (d.getSeconds()*1000 + d.getMilliseconds()) + 30;
+    timer = setTimeout(function(){ tick(); scheduleReal(); }, ms);
+  }
+  var syncBox = document.getElementById('sync'), syncT = document.getElementById('sync-t');
+  function setMode(m){
+    mode = m; clearTimers();
+    document.querySelectorAll('.seg button').forEach(function(b){ b.setAttribute('aria-pressed', b.dataset.mode === m); });
+    K = reduce ? .06 : m === '60' ? .3 : m === '10' ? .62 : 1;
+    if (m === 'real'){
+      var now = nowMinutes();
+      if (L === null) build(now); else advance((now - simMin + 720) % 720);
+      simMin = now; scheduleReal();
+    } else if (m !== 'pause') timer = setInterval(tick, 60000 / +m);
+    syncBox.dataset.live = m === 'real' ? '1' : '0';
+    syncT.textContent = m === 'real' ? 'Sincronizzato con l’ora reale' : m === 'pause' ? 'In pausa' : 'Accelerato ' + m + '×, un minuto ogni ' + (60 / +m) + ' s';
+  }
+  document.querySelectorAll('.seg button').forEach(function(b){ b.addEventListener('click', function(){ setMode(b.dataset.mode); }); });
+  document.getElementById('plus').addEventListener('click', function(){ if (mode === 'real') setMode('pause'); tick(); });
+  document.getElementById('now').addEventListener('click', function(){ setMode('real'); });
+  document.getElementById('nums').addEventListener('change', function(e){ gBalls.classList.toggle('numbers', e.target.checked); });
+  document.getElementById('slow').addEventListener('change', function(e){ SLOW = e.target.checked ? 4 : 1; });
+  document.getElementById('snd').addEventListener('change', function(e){ soundOn = e.target.checked; });
+  document.addEventListener('visibilitychange', function(){
+    if (document.hidden) return;
+    if (mode === 'real'){ var now = nowMinutes(); advance((now - simMin + 720) % 720); simMin = now; }
+    else applyLogical();
+  });
+
+  /* ---------------- ogni quanto si ripete l'ordine ---------------- */
+  (function(){
+    var S = fresh();
+    for (var m = 0; m < 720; m++) step(S);
+    function gcd(a, b){ return b ? gcd(b, a % b) : a; }
+    var seen = [], Lc = 1;
+    for (var s = 0; s < N; s++){
+      if (seen[s]) continue; var c = 0, x = s;
+      while (!seen[x]){ seen[x] = 1; x = S.q[x]; c++; }
+      Lc = Lc / gcd(Lc, c) * c;
+    }
+    var days = Lc / 2;
+    document.getElementById('perm').innerHTML = 'Ogni giro di 12 ore rimescola le palline. Con <b>' + N + ' palline</b>, in questo meccanismo l’ordine di partenza torna identico dopo <b>' +
+      (days % 1 ? days.toFixed(1).replace('.', ',') : days) + ' giorni</b>.';
+  })();
+
+  setMode('real');
+  /* per provare un'ora qualsiasi dalla console: rollOClock.set(12, 59) */
+  window.rollOClock = { set:function(h, m){ setMode('pause'); simMin = ((h % 12 || 12) - 1) * 60 + m; build(simMin); } };
+})();
+</script>
+</body>
+</html>
